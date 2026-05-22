@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -10,12 +11,17 @@ const authMiddleware = (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secretkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select("-password");
 
-    // FIX: Controller req.user._id bekliyor, decoded içinde userId geliyor
+    if (!user) {
+      return res.status(401).json({ message: "Geçersiz token." });
+    }
+
     req.user = {
-      _id: decoded.userId,
-      username: decoded.username,
+      _id: user._id,
+      username: user.username,
+      role: user.role || "user",
     };
 
     next();

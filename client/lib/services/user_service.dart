@@ -16,11 +16,6 @@ class UserService {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('jwt_token');
 
-      print('[UserService] baseUrl: $baseUrl');
-      print(
-        '[UserService] token: ${token != null ? "VAR (${token.length} karakter)" : "YOK"}',
-      );
-
       if (token == null) return null;
 
       final uri = Uri.parse("$baseUrl/me");
@@ -34,9 +29,6 @@ class UserService {
           )
           .timeout(const Duration(seconds: 10));
 
-      print('[UserService] getUserProfile status: ${response.statusCode}');
-      print('[UserService] getUserProfile body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data["user"];
@@ -47,21 +39,15 @@ class UserService {
         return null;
       }
     } catch (e) {
-      print('[UserService] getUserProfile error: $e');
       return null;
     }
   }
 
   static Future<List<dynamic>> getSuggestedUsers() async {
     try {
-      print('[UserService] getSuggestedUsers URL: $baseUrl/suggested');
-
       final response = await http
           .get(Uri.parse("$baseUrl/suggested"))
           .timeout(const Duration(seconds: 10));
-
-      print('[UserService] getSuggestedUsers status: ${response.statusCode}');
-      print('[UserService] getSuggestedUsers body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -69,7 +55,6 @@ class UserService {
       }
       return [];
     } catch (e) {
-      print('[UserService] getSuggestedUsers error: $e');
       return [];
     }
   }
@@ -79,14 +64,9 @@ class UserService {
       final encodedQuery = Uri.encodeComponent(query);
       final url = "$baseUrl/search?q=$encodedQuery";
 
-      print('[UserService] searchUsers URL: $url');
-
       final response = await http
           .get(Uri.parse(url))
           .timeout(const Duration(seconds: 10));
-
-      print('[UserService] searchUsers status: ${response.statusCode}');
-      print('[UserService] searchUsers body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -94,8 +74,116 @@ class UserService {
       }
       return [];
     } catch (e) {
-      print('[UserService] searchUsers error: $e');
       return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateUserProfile({
+    required String fullName,
+    required String username,
+    required String email,
+    required String phone,
+    required String city,
+    String? profileImage,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+
+      if (token == null) {
+        return {
+          "success": false,
+          "message": "Oturum bulunamadı. Lütfen tekrar giriş yap.",
+        };
+      }
+
+      final response = await http
+          .put(
+            Uri.parse("$baseUrl/me"),
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json",
+            },
+            body: jsonEncode({
+              "fullName": fullName,
+              "username": username,
+              "email": email,
+              "phone": phone,
+              "city": city,
+              "profileImage": profileImage,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "message": data["message"] ?? "Profil güncellendi.",
+          "user": data["user"],
+        };
+      }
+
+      return {
+        "success": false,
+        "message": data["message"] ?? "Profil güncellenemedi.",
+      };
+    } catch (e) {
+      return {
+        "success": false,
+        "message": "Profil güncellenirken hata oluştu.",
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+
+      if (token == null) {
+        return {
+          "success": false,
+          "message": "Oturum bulunamadı. Lütfen tekrar giriş yap.",
+        };
+      }
+
+      final response = await http
+          .put(
+            Uri.parse("$baseUrl/change-password"),
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json",
+            },
+            body: jsonEncode({
+              "oldPassword": oldPassword,
+              "newPassword": newPassword,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "message": data["message"] ?? "Şifre değiştirildi.",
+        };
+      }
+
+      return {
+        "success": false,
+        "message": data["message"] ?? "Şifre değiştirilemedi.",
+      };
+    } catch (e) {
+      return {
+        "success": false,
+        "message": "Şifre değiştirilirken hata oluştu.",
+      };
     }
   }
 }

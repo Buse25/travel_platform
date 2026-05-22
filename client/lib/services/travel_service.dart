@@ -13,9 +13,7 @@ class TravelService {
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("jwt_token");
-    print("[TravelService] Token: ${token != null ? 'VAR' : 'YOK'}");
-    return token;
+    return prefs.getString("jwt_token");
   }
 
   Future<Map<String, dynamic>> createTravel({
@@ -49,9 +47,6 @@ class TravelService {
       "locationPhoto": locationPhoto,
     };
 
-    print("[TravelService] createTravel URL: $baseUrl");
-    print("[TravelService] createTravel body: $body");
-
     final response = await http.post(
       Uri.parse(baseUrl),
       headers: {
@@ -60,9 +55,6 @@ class TravelService {
       },
       body: jsonEncode(body),
     );
-
-    print("[TravelService] createTravel status: ${response.statusCode}");
-    print("[TravelService] createTravel body: ${response.body}");
 
     final decoded = jsonDecode(response.body);
 
@@ -81,8 +73,6 @@ class TravelService {
       throw Exception("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
     }
 
-    print("[TravelService] getMyTravels URL: $baseUrl/my");
-
     final response = await http.get(
       Uri.parse("$baseUrl/my"),
       headers: {
@@ -91,9 +81,6 @@ class TravelService {
       },
     );
 
-    print("[TravelService] getMyTravels status: ${response.statusCode}");
-    print("[TravelService] getMyTravels body: ${response.body}");
-
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
@@ -101,5 +88,134 @@ class TravelService {
       final message = decoded['message'] ?? "Veriler alınamadı.";
       throw Exception(message);
     }
+  }
+
+  Future<Map<String, dynamic>> getFeedTravels() async {
+    final token = await _getToken();
+
+    if (token == null) {
+      throw Exception("Oturum bulunamadÄ±. LÃ¼tfen tekrar giriÅŸ yapÄ±n.");
+    }
+
+    final response = await http
+        .get(
+          Uri.parse("$baseUrl/feed"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        )
+        .timeout(const Duration(seconds: 10));
+
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return {
+        "source": decoded["source"] ?? "global",
+        "travels": decoded["travels"] ?? [],
+      };
+    }
+
+    throw Exception(decoded["message"] ?? "Ana akis alinamadi.");
+  }
+
+  Future<List<dynamic>> searchTravels(String query) async {
+    try {
+      final encodedQuery = Uri.encodeComponent(query);
+      final url = "$baseUrl/search?q=$encodedQuery";
+
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data["travels"] ?? [];
+      }
+
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getUserApprovedTravels(String userId) async {
+    try {
+      final url = "$baseUrl/user/$userId";
+
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data["travels"] is List) {
+          return data["travels"];
+        }
+
+        return [];
+      }
+
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getPendingTravelsForAdmin() async {
+    final token = await _getToken();
+
+    if (token == null) {
+      throw Exception("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+    }
+
+    final response = await http
+        .get(
+          Uri.parse("$baseUrl/admin/pending"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        )
+        .timeout(const Duration(seconds: 10));
+
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return decoded["travels"] ?? [];
+    }
+
+    throw Exception(decoded["message"] ?? "Bekleyen seyahatler alınamadı.");
+  }
+
+  Future<Map<String, dynamic>> updateTravelVerificationStatus({
+    required String travelId,
+    required String verificationStatus,
+  }) async {
+    final token = await _getToken();
+
+    if (token == null) {
+      throw Exception("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+    }
+
+    final response = await http
+        .patch(
+          Uri.parse("$baseUrl/admin/$travelId/status"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+          body: jsonEncode({"verificationStatus": verificationStatus}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return decoded;
+    }
+
+    throw Exception(decoded["message"] ?? "Seyahat durumu güncellenemedi.");
   }
 }

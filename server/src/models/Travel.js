@@ -63,6 +63,15 @@ const travelSchema = new mongoose.Schema(
             enum: ["Beklemede", "Onaylandı", "Reddedildi"],
             default: "Beklemede",
         },
+        reviewedAt: {
+            type: Date,
+            default: null,
+        },
+        reviewedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+        },
     },
     { timestamps: true }
 );

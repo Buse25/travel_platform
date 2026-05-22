@@ -1,9 +1,15 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static const String baseUrl = "http://localhost:5000/api/auth";
+  static String get baseUrl {
+    if (kIsWeb) {
+      return "http://localhost:5000/api/auth";
+    }
+    return "http://10.0.2.2:5000/api/auth";
+  }
 
   static Future<Map<String, dynamic>> register({
     required String fullName,
@@ -61,7 +67,7 @@ class AuthService {
         if (data["token"] != null) {
           await prefs.setString('jwt_token', data["token"]);
         }
-        
+
         return {"success": true, "data": data};
       } else {
         return {

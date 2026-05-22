@@ -1,13 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/auth_services.dart';
+import '../services/follow_service.dart';
 import '../services/user_service.dart';
 import '../services/travel_service.dart';
 import '../widgets/custom_bottom_nav.dart';
-import 'login_page.dart';
-import 'profile_settings_page.dart';
-import 'my_travels_page.dart';
-import 'following_page.dart';
 import 'add_travel_page.dart';
+import 'admin_travel_approval_page.dart';
+import 'following_page.dart';
+import 'login_page.dart';
+import 'my_travels_page.dart';
+import 'profile_settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -19,6 +22,8 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? userProfile;
   List<dynamic> myTravels = [];
+  int followersCount = 0;
+  int followingCount = 0;
   bool isLoading = true;
   String? errorMessage;
 
@@ -34,27 +39,38 @@ class _ProfilePageState extends State<ProfilePage> {
       errorMessage = null;
     });
 
-    // Profil ve seyahat sayısını paralel çek
-    final results = await Future.wait([
-      UserService.getUserProfile(),
-      TravelService().getMyTravels().catchError((_) => <dynamic>[]),
-    ]);
+    final profile = await UserService.getUserProfile();
+    final travels = await TravelService().getMyTravels().catchError(
+      (_) => <dynamic>[],
+    );
 
-    if (mounted) {
-      setState(() {
-        userProfile = results[0] as Map<String, dynamic>?;
-        myTravels = results[1] as List<dynamic>;
-        isLoading = false;
+    Map<String, int> stats = {
+      "followersCount": 0,
+      "followingCount": 0,
+    };
 
-        if (userProfile == null) {
-          errorMessage =
-              "Profil bilgileri alınamadı.\nİnternet bağlantınızı veya oturumunuzu kontrol edin.";
-        }
-      });
+    final userId = (profile?["_id"] ?? profile?["id"] ?? "").toString();
+    if (userId.isNotEmpty) {
+      stats = await FollowService.getFollowStats(userId);
     }
+
+    if (!mounted) return;
+
+    setState(() {
+      userProfile = profile;
+      myTravels = travels;
+      followersCount = stats["followersCount"] ?? 0;
+      followingCount = stats["followingCount"] ?? 0;
+      isLoading = false;
+
+      if (userProfile == null) {
+        errorMessage =
+            "Profil bilgileri alınamadı. İnternet bağlantınızı veya oturumunuzu kontrol edin.";
+      }
+    });
   }
 
-  void handleLogout(BuildContext context) async {
+  Future<void> handleLogout(BuildContext context) async {
     await AuthService.logout();
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(
@@ -65,15 +81,19 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Instagram tarzı + butonu ile AddTravelPage'e git, dönünce yenile
   Future<void> _goToAddTravel() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AddTravelPage()),
     );
     if (result == true) {
-      loadAll(); // Yeni seyahat eklendiyse sayfayı yenile
+      loadAll();
     }
+  }
+
+  ImageProvider? _profileImageProvider(String image) {
+    if (image.isEmpty) return null;
+    return MemoryImage(base64Decode(image.split(",").last));
   }
 
   @override
@@ -87,7 +107,6 @@ class _ProfilePageState extends State<ProfilePage> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          // Instagram'daki + ikonuna benzer şekilde sağ üstte
           IconButton(
             icon: const Icon(Icons.add_box_outlined, size: 28),
             tooltip: "Seyahat Ekle",
@@ -99,8 +118,8 @@ class _ProfilePageState extends State<ProfilePage> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
-          ? _buildErrorState()
-          : _buildProfile(),
+              ? _buildErrorState()
+              : _buildProfile(),
       bottomNavigationBar: const CustomBottomNav(currentIndex: 3),
     );
   }
@@ -108,7 +127,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildErrorState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -132,186 +151,261 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildProfile() {
+    final isAdmin = userProfile?["role"] == "admin";
+    final fullName = userProfile!["fullName"] ?? "İsimsiz Kullanıcı";
+    final username = userProfile!["username"] ?? "";
+    final city = userProfile!["city"] ?? "Belirtilmemiş";
+    final profileImage = userProfile!["profileImage"] ?? "";
+
     return RefreshIndicator(
       onRefresh: loadAll,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxWidth = constraints.maxWidth > 720 ? 680.0 : double.infinity;
+
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: Column(
+                  children: [
+                    Card(
+                      elevation: 4,
+                      shadowColor: Colors.black12,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                CircleAvatar(
+                                  radius: 52,
+                                  backgroundColor: Colors.deepPurple,
+                                  backgroundImage:
+                                      _profileImageProvider(profileImage),
+                                  child: profileImage.isEmpty
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 52,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                                GestureDetector(
+                                  onTap: _goToAddTravel,
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.deepPurple,
+                                    ),
+                                    padding: const EdgeInsets.all(7),
+                                    child: const Icon(
+                                      Icons.add,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              fullName,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "@$username",
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.location_city,
+                                  size: 18,
+                                  color: Colors.deepPurple,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(city),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildStatCard(
+                                    myTravels.length.toString(),
+                                    "Seyahat",
+                                    Icons.flight_takeoff,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    followersCount.toString(),
+                                    "Takipçi",
+                                    Icons.people_alt_outlined,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    followingCount.toString(),
+                                    "Takip",
+                                    Icons.person_add_alt,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _goToAddTravel,
+                                icon: const Icon(Icons.flight_takeoff),
+                                label: const Text("Yeni Seyahat Ekle"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.deepPurple,
+                                  side: const BorderSide(
+                                    color: Colors.deepPurple,
+                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoCard(),
+                    const SizedBox(height: 16),
+                    _buildMenuCard(isAdmin),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String value, String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.deepPurple, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const SizedBox(height: 24),
-
-            // ── Profil Fotoğrafı ────────────────────────────────────
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                const CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.deepPurpleAccent,
-                  child: Icon(Icons.person, size: 50, color: Colors.white),
-                ),
-                // Küçük + rozeti (isteğe bağlı, kaldırabilirsin)
-                GestureDetector(
-                  onTap: _goToAddTravel,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.deepPurple,
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.add, size: 16, color: Colors.white),
-                  ),
-                ),
-              ],
+            _buildInfoRow(Icons.email, userProfile!["email"] ?? "Belirtilmemiş"),
+            const Divider(),
+            _buildInfoRow(Icons.phone, userProfile!["phone"] ?? "Belirtilmemiş"),
+            const Divider(),
+            _buildInfoRow(
+              Icons.location_city,
+              userProfile!["city"] ?? "Belirtilmemiş",
             ),
-            const SizedBox(height: 12),
-
-            // ── Ad Soyad & Kullanıcı Adı ────────────────────────────
-            Text(
-              userProfile!["fullName"] ?? "İsimsiz Kullanıcı",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "@${userProfile!["username"] ?? ""}",
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 20),
-
-            // ── İstatistik Satırı (Instagram tarzı) ────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStat(myTravels.length.toString(), "Seyahat"),
-                  _buildStatDivider(),
-                  _buildStat(
-                    userProfile!["followersCount"]?.toString() ?? "0",
-                    "Takipçi",
-                  ),
-                  _buildStatDivider(),
-                  _buildStat(
-                    userProfile!["followingCount"]?.toString() ?? "0",
-                    "Takip",
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // ── Seyahat Ekle Butonu (profil altında büyük) ─────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _goToAddTravel,
-                  icon: const Icon(Icons.flight_takeoff, size: 18),
-                  label: const Text("Yeni Seyahat Ekle"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.deepPurple,
-                    side: const BorderSide(color: Colors.deepPurple),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // ── Kişisel Bilgiler Kartı ───────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      _buildInfoRow(
-                        Icons.email,
-                        userProfile!["email"] ?? "Belirtilmemiş",
-                      ),
-                      const Divider(),
-                      _buildInfoRow(
-                        Icons.phone,
-                        userProfile!["phone"] ?? "Belirtilmemiş",
-                      ),
-                      const Divider(),
-                      _buildInfoRow(
-                        Icons.location_city,
-                        userProfile!["city"] ?? "Belirtilmemiş",
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ── Menü Öğeleri ────────────────────────────────────────
-            _buildMenuItem(Icons.settings, "Profil Ayarları", () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileSettingsPage()),
-              );
-            }),
-            _buildMenuItem(Icons.card_travel, "Seyahatlerim", () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MyTravelsPage()),
-              ).then((_) => loadAll()); // Geri dönünce sayacı güncelle
-            }),
-            _buildMenuItem(Icons.people, "Takip", () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const FollowingPage()),
-              );
-            }),
-            _buildMenuItem(
-              Icons.logout,
-              "Çıkış Yap",
-              () => handleLogout(context),
-              isDestructive: true,
-            ),
-
-            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
 
-  // ── Yardımcı Widget'lar ─────────────────────────────────────────
-
-  Widget _buildStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-      ],
+  Widget _buildMenuCard(bool isAdmin) {
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: [
+          _buildMenuItem(Icons.settings, "Profil Ayarları", () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileSettingsPage()),
+            ).then((_) => loadAll());
+          }),
+          _buildMenuItem(Icons.card_travel, "Seyahatlerim", () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyTravelsPage()),
+            ).then((_) => loadAll());
+          }),
+          _buildMenuItem(Icons.people, "Takip", () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FollowingPage()),
+            ).then((_) => loadAll());
+          }),
+          if (isAdmin)
+            _buildMenuItem(Icons.verified_user, "Seyahat Onayları", () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AdminTravelApprovalPage(),
+                ),
+              );
+            }),
+          _buildMenuItem(
+            Icons.logout,
+            "Çıkış Yap",
+            () => handleLogout(context),
+            isDestructive: true,
+          ),
+        ],
+      ),
     );
-  }
-
-  Widget _buildStatDivider() {
-    return Container(height: 32, width: 1, color: Colors.grey.shade300);
   }
 
   Widget _buildInfoRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           Icon(icon, color: Colors.deepPurple, size: 20),

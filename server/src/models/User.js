@@ -34,10 +34,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
     interests: {
     type: [String],
     default: [],
     },
+    profileImage: {
+  type: String,
+  default: "",
+},
     trustScore: {
       type: Number,
       default: 0,

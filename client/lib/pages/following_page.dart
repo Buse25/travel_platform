@@ -7,9 +7,7 @@ class FollowingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Takip")),
-      body: const Center(
-        child: Text("Takip sistemi yakında eklenecek."),
-      ),
+      body: const Center(child: Text("Takip sistemi yakında eklenecek.")),
     );
   }
 }

@@ -18,7 +18,9 @@ class UserListItem extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), // Rounded corners for modern feel
+        borderRadius: BorderRadius.circular(
+          12,
+        ), // Rounded corners for modern feel
       ),
       child: Padding(
         padding: const EdgeInsets.all(12.0), // Consistent padding for mobile
@@ -48,12 +50,19 @@ class UserListItem extends StatelessWidget {
                   if (city.isNotEmpty)
                     Row(
                       children: [
-                        const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             city,
-                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -67,7 +76,10 @@ class UserListItem extends StatelessWidget {
                       runSpacing: 6,
                       children: interests.take(3).map((interest) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.deepPurple.shade50,
                             borderRadius: BorderRadius.circular(8),
